@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>IPSA Presidential Election Admin</title>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>IPSA Presidential Election Admin</h1>
+    <div class="small">school vote app made by hisyam/doorblox - 4ever/thunder - ©2025</div>
+    <div class="hr"></div>
+
+    <div id="lock">
+      <div class="row">
+        <input id="adminkey" placeholder="Admin key" style="flex:1"/>
+        <button onclick="unlock()">Unlock Dashboard</button>
+      </div>
+      <div id="unlockMsg" class="small"></div>
+    </div>
+
+    <div id="dash" style="display:none">
+      <div class="row">
+        <div class="tag">Totals</div>
+        <div id="totals" class="small"></div>
+      </div>
+      <div class="hr"></div>
+      <h2>Generate tokens</h2>
+      <div class="row">
+        <select id="genRole">
+          <option value="male">male</option>
+          <option value="female">female</option>
+          <option value="teacher">teacher</option>
+        </select>
+        <input id="genCount" type="number" min="1" max="5000" value="10" style="width:120px"/>
+        <button onclick="genTokens()">Generate</button>
+        <button onclick="openQR()">Open QR sheet</button>
+        <button onclick="downloadCSV()">Download CSV</button>
+        <button style="background:#e11d48" onclick="resetAll()">Reset ALL</button>
+      </div>
+      <p class="small">Unused tokens left: <span id="unused">-</span></p>
+      <div class="hr"></div>
+
+      <h2>Tokens</h2>
+      <div class="row">
+        <select id="filterRole" onchange="refreshTokens()">
+          <option value="">all</option>
+          <option value="male">male</option>
+          <option value="female">female</option>
+          <option value="teacher">teacher</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th>Token</th><th>Role</th><th>Used</th><th></th></tr></thead>
+        <tbody id="tokRows"></tbody>
+      </table>
+
+      <div class="hr"></div>
+      <h2>Live votes</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Token</th><th>Role</th><th>Vote</th></tr></thead>
+        <tbody id="voteRows"></tbody>
+      </table>
+    </div>
+    <div id="error" class="bad small"></div>
+  </div>
+</div>
+
+<script>
+let ADMIN_KEY = localStorage.getItem('sv_admin') || '';
+window.addEventListener('load',()=>{
+  if (ADMIN_KEY) { document.getElementById('adminkey').value = ADMIN_KEY; unlock(); }
+});
+
+function qs(k){ return encodeURIComponent(k); }
+function api(path, opts={}){
+  const u = `/api/${path}${path.includes('?')?'&':'?'}admin_key=${qs(ADMIN_KEY)}`;
+  return fetch(u, { headers:{'content-type':'application/json'}, ...opts });
+}
+
+async function unlock(){
+  ADMIN_KEY = document.getElementById('adminkey').value.trim();
+  if (!ADMIN_KEY) return;
+  document.getElementById('unlockMsg').innerText = 'Unlocking…';
+  try {
+    const r = await api('admin/summary');
+    const j = await r.json();
+    if (!j.ok){ document.getElementById('unlockMsg').innerText = 'Invalid admin key or server error.'; return; }
+    localStorage.setItem('sv_admin', ADMIN_KEY);
+    document.getElementById('unlockMsg').innerText = '';
+    document.getElementById('dash').style.display='block';
+    document.getElementById('lock').style.display='none';
+    refreshAll();
+    setInterval(refreshAll, 4000);
+  } catch (e) {
+    document.getElementById('unlockMsg').innerText = 'Server error.';
+  }
+}
+
+async function refreshAll(){
+  await Promise.all([refreshSummary(), refreshTokens(), refreshVotes()]);
+}
+
+async function refreshSummary(){
+  const r = await api('admin/summary');
+  const j = await r.json();
+  if (!j.ok) return;
+  document.getElementById('unused').innerText = j.tokens_unused;
+  const t = [];
+  t.push('Male: ' + Object.entries(j.totals.male).map(([k,v])=>`${k}=${v}`).join(' · '));
+  t.push('Female: ' + Object.entries(j.totals.female).map(([k,v])=>`${k}=${v}`).join(' · '));
+  t.push('Tokens total=' + j.tokens_total);
+  document.getElementById('totals').innerText = t.join(' | ');
+}
+
+async function refreshTokens(){
+  const role = document.getElementById('filterRole').value;
+  const r = await api('admin/list_tokens'+(role?`?role=${qs(role)}`:''));
+  const j = await r.json();
+  if (!j.ok) return;
+  const tb = document.getElementById('tokRows'); tb.innerHTML='';
+  for (const it of j.items) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><code>${it.token}</code></td><td>${it.role}</td><td>${it.used?'<span class="ok">yes</span>':'no'}</td><td><button onclick="delToken('${it.token}')">Delete</button></td>`;
+    tb.appendChild(tr);
+  }
+}
+
+async function refreshVotes(){
+  const r = await api('admin/votes?limit=200');
+  const j = await r.json();
+  if (!j.ok) return;
+  const tb = document.getElementById('voteRows'); tb.innerHTML='';
+  for (const v of j.rows) {
+    const t = new Date(v.timestamp).toLocaleString();
+    const pick = [v.male, v.female].filter(Boolean).join(' + ');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${t}</td><td>${v.token}</td><td>${v.role}</td><td>${pick}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+async function genTokens(){
+  const role = document.getElementById('genRole').value;
+  const count = Number(document.getElementById('genCount').value||0);
+  const r = await api('admin/generate_tokens', { method:'POST', body: JSON.stringify({ role, count }) });
+  const j = await r.json();
+  if (!j.ok) return alert(j.error||'Error');
+  alert('Generated '+j.tokens.length+' tokens');
+  refreshAll();
+}
+
+function openQR(){
+  window.open('/qr?admin_key='+qs(ADMIN_KEY), '_blank');
+}
+
+function downloadCSV(){
+  window.location = '/api/admin/csv?admin_key='+qs(ADMIN_KEY);
+}
+
+async function resetAll(){
+  if (!confirm('Really reset ALL tokens and votes?')) return;
+  const r = await api('admin/reset_all',{ method:'POST' });
+  const j = await r.json();
+  if (!j.ok) return alert(j.error||'Error');
+  refreshAll();
+}
+
+async function delToken(t){
+  if (!confirm('Delete token '+t+'?')) return;
+  const r = await api('admin/delete_token', { method:'POST', body: JSON.stringify({ token: t }) });
+  const j = await r.json();
+  if (!j.ok) return alert(j.error||'Error');
+  refreshTokens();
+}
+</script>
+</body>
+</html>
