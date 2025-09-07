@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>QR Sheet</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>QR Sheet</h1>
+    <div class="small">Print this page. Each box shows QR + token text.</div>
+    <div class="hr"></div>
+    <div id="wrap" class="qrgrid"></div>
+  </div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const ADMIN_KEY = params.get('admin_key')||'';
+function qs(k){ return encodeURIComponent(k); }
+
+async function loadTokens(){
+  const r = await fetch('/api/admin/list_tokens?admin_key='+qs(ADMIN_KEY));
+  const j = await r.json();
+  if (!j.ok) return alert('Unauthorized or error');
+  const wrap = document.getElementById('wrap');
+  for (const it of j.items) {
+    const d = document.createElement('div');
+    d.className='qrbox';
+    const c = document.createElement('canvas');
+    d.appendChild(c);
+    const p = document.createElement('div');
+    p.innerHTML = `<strong>${it.token}</strong><br><span class="small">${it.role}${it.used?' (used)':''}</span>`;
+    d.appendChild(p);
+    wrap.appendChild(d);
+    QRCode.toCanvas(c, it.token, { width: 160 });
+  }
+}
+loadTokens();
+</script>
+</body>
+</html>
