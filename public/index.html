@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>IPSA Presidential Election</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>IPSA Presidential Election</h1>
+      <div class="small">school vote app by hisyam</div>
+      <div class="hr"></div>
+      <div id="gate">
+        <p>Scan your token QR or type your token:</p>
+        <div class="row">
+          <input id="token" placeholder="Enter token manually" style="flex:1"/>
+          <button onclick="startScan()">Scan QR</button>
+          <button onclick="continueToken()">Continue</button>
+        </div>
+        <div id="scan" style="margin-top:12px;display:none">
+          <div id="reader" style="width:320px"></div>
+        </div>
+        <div id="err" class="bad small"></div>
+      </div>
+      <div class="small">school vote app by hisyam/doorblox - 4ever/thunder - @2025</div>
+
+      <div id="ballot" style="display:none">
+        <h2 id="roleHeadline"></h2>
+        <div id="choices"></div>
+        <div class="row" style="margin-top:12px">
+          <button onclick="submitVote()">Submit vote</button>
+          <button onclick="resetGate()">Cancel</button>
+        </div>
+        <div id="voteErr" class="bad small"></div>
+      </div>
+
+      <div id="thanks" style="display:none">
+        <h2>Thank you!</h2>
+        <p class="small">Your vote was recorded. Returning to gate…</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+let tokenValue = '';
+let ballotRule = '';
+let maleCandidates=[], femaleCandidates=[];
+
+function startScan(){
+  document.getElementById('scan').style.display='block';
+  const html5Qrcode = new Html5Qrcode('reader');
+  Html5Qrcode.getCameras().then(devices => {
+    const id = devices[0]?.id;
+    if (!id) throw new Error('No camera');
+    html5Qrcode.start(id, { fps:10, qrbox: 180 },
+      (decoded)=>{
+        tokenValue = decoded.trim();
+        document.getElementById('token').value = tokenValue;
+        html5Qrcode.stop().then(()=>{ document.getElementById('scan').style.display='none'; });
+      },
+      ()=>{});
+  }).catch(err => showErr(err.message||String(err)));
+}
+
+function showErr(m){ document.getElementById('err').innerText = m||''; }
+function showVoteErr(m){ document.getElementById('voteErr').innerText = m||''; }
+
+async function continueToken(){
+  tokenValue = document.getElementById('token').value.trim();
+  if (!tokenValue) return showErr('Enter a token');
+  showErr('');
+  try{
+    const r = await fetch('/api/public/validate_token', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ token: tokenValue })
+    });
+    const j = await r.json();
+    if (!j.ok) return showErr(j.error || 'Server error');
+    ballotRule = j.rule;
+    maleCandidates = j.maleCandidates;
+    femaleCandidates = j.femaleCandidates;
+    renderBallot(j.role);
+  }catch(e){ showErr('Server error'); }
+}
+
+function renderBallot(role){
+  document.getElementById('gate').style.display='none';
+  document.getElementById('ballot').style.display='block';
+  const h = document.getElementById('roleHeadline');
+  const wrap = document.getElementById('choices');
+  wrap.innerHTML = ''; showVoteErr('');
+
+  if (role === 'male'){
+    h.innerText = 'Choose ONE male candidate';
+    wrap.innerHTML = maleCandidates.map(c=>`<label><input type="radio" name="male" value="${c}"> ${c}</label><br>`).join('');
+  } else if (role === 'female'){
+    h.innerText = 'Choose ONE female candidate';
+    wrap.innerHTML = femaleCandidates.map(c=>`<label><input type="radio" name="female" value="${c}"> ${c}</label><br>`).join('');
+  } else {
+    h.innerText = 'Choose ONE male and ONE female candidate';
+    wrap.innerHTML = `
+      <div><strong>Male</strong><br>${maleCandidates.map(c=>`<label><input type="radio" name="male" value="${c}"> ${c}</label><br>`).join('')}</div>
+      <div style="height:8px"></div>
+      <div><strong>Female</strong><br>${femaleCandidates.map(c=>`<label><input type="radio" name="female" value="${c}"> ${c}</label><br>`).join('')}</div>
+    `;
+  }
+}
+
+function resetGate(){
+  document.getElementById('ballot').style.display='none';
+  document.getElementById('thanks').style.display='none';
+  document.getElementById('gate').style.display='block';
+  document.getElementById('token').value='';
+  tokenValue=''; ballotRule='';
+}
+
+async function submitVote(){
+  const male = document.querySelector('input[name="male"]:checked')?.value;
+  const female = document.querySelector('input[name="female"]:checked')?.value;
+
+  if (ballotRule==='vote_one_male' && !male) return showVoteErr('Pick one male candidate');
+  if (ballotRule==='vote_one_female' && !female) return showVoteErr('Pick one female candidate');
+  if (ballotRule==='vote_one_each' && (!male || !female)) return showVoteErr('Pick one male and one female');
+
+  try{
+    const r = await fetch('/api/public/submit_vote', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ token: tokenValue, male, female })
+    });
+    const j = await r.json();
+    if (!j.ok) return showVoteErr(j.error || 'Server error');
+    document.getElementById('ballot').style.display='none';
+    document.getElementById('thanks').style.display='block';
+    setTimeout(()=>{ resetGate(); }, 5000);
+  }catch(e){ showVoteErr('Server error'); }
+}
+</script>
+</body>
+</html>
