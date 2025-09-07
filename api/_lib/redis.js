@@ -1,15 +1,16 @@
+// api/_lib/redis.js
 import { createClient } from 'redis';
 
-let _clientPromise;
+let clientPromise;
 
-/** Get a shared Redis client across invocations */
 export async function getRedis() {
-  if (!_clientPromise) {
+  if (!clientPromise) {
     const url = process.env.REDIS_URL;
     if (!url) throw new Error('REDIS_URL not set');
-    const client = createClient({ url });
+    const tls = url.startsWith('rediss://');
+    const client = createClient({ url, socket: tls ? { tls: true } : {} });
     client.on('error', (e) => console.error('Redis error', e));
-    _clientPromise = client.connect().then(() => client);
+    clientPromise = client.connect().then(() => client);
   }
-  return _clientPromise;
+  return clientPromise;
 }
