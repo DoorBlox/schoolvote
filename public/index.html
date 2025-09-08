@@ -11,21 +11,21 @@
   <div class="container">
     <div class="card">
       <h1>IPSA Presidential Election</h1>
-      <div class="small">school vote app by hisyam</div>
+      <div class="small">school vote app made by hisyam - 4ever - ©2025</div>
       <div class="hr"></div>
+
       <div id="gate">
         <p>Scan your token QR or type your token:</p>
         <div class="row">
           <input id="token" placeholder="Enter token manually" style="flex:1"/>
-          <button onclick="startScan()">Scan QR</button>
-          <button onclick="continueToken()">Continue</button>
+          <button id="manualBtn" onclick="continueToken()">Continue</button>
         </div>
-        <div id="scan" style="margin-top:12px;display:none">
-          <div id="reader" style="width:320px"></div>
+        <div id="scan" style="margin-top:12px">
+          <div id="reader" style="width:320px;height:auto"></div>
+          <div class="small" id="scanMsg"></div>
         </div>
         <div id="err" class="bad small"></div>
       </div>
-      <div class="small">school vote app by hisyam/doorblox - 4ever/thunder - @2025</div>
 
       <div id="ballot" style="display:none">
         <h2 id="roleHeadline"></h2>
@@ -48,25 +48,38 @@
 let tokenValue = '';
 let ballotRule = '';
 let maleCandidates=[], femaleCandidates=[];
-
-function startScan(){
-  document.getElementById('scan').style.display='block';
-  const html5Qrcode = new Html5Qrcode('reader');
-  Html5Qrcode.getCameras().then(devices => {
-    const id = devices[0]?.id;
-    if (!id) throw new Error('No camera');
-    html5Qrcode.start(id, { fps:10, qrbox: 180 },
-      (decoded)=>{
-        tokenValue = decoded.trim();
-        document.getElementById('token').value = tokenValue;
-        html5Qrcode.stop().then(()=>{ document.getElementById('scan').style.display='none'; });
-      },
-      ()=>{});
-  }).catch(err => showErr(err.message||String(err)));
-}
+let qrObj = null;
 
 function showErr(m){ document.getElementById('err').innerText = m||''; }
 function showVoteErr(m){ document.getElementById('voteErr').innerText = m||''; }
+function scanMsg(m){ document.getElementById('scanMsg').innerText = m||''; }
+
+async function startScan(){
+  try {
+    if (!window.Html5Qrcode) throw new Error('QR library not loaded');
+    qrObj = new Html5Qrcode('reader');
+    const devices = await Html5Qrcode.getCameras();
+    const id = devices?.[0]?.id;
+    if (!id) { scanMsg('No camera found. You can type the token instead.'); return; }
+    scanMsg('Camera active. Point at the QR token.');
+    await qrObj.start(id, { fps:10, qrbox: 200 }, onScan);
+  } catch (e) {
+    scanMsg('Unable to start camera; type the token instead.');
+    console.log(e);
+  }
+}
+
+function stopScan(){
+  if (qrObj) try { qrObj.stop().catch(()=>{}); } catch {}
+}
+
+function onScan(decoded){
+  tokenValue = (decoded||'').trim();
+  if (!tokenValue) return;
+  stopScan();
+  document.getElementById('token').value = tokenValue;
+  continueToken();
+}
 
 async function continueToken(){
   tokenValue = document.getElementById('token').value.trim();
@@ -110,11 +123,13 @@ function renderBallot(role){
 }
 
 function resetGate(){
+  stopScan();
   document.getElementById('ballot').style.display='none';
   document.getElementById('thanks').style.display='none';
   document.getElementById('gate').style.display='block';
   document.getElementById('token').value='';
   tokenValue=''; ballotRule='';
+  startScan(); // re-arm camera when back to gate
 }
 
 async function submitVote(){
@@ -137,6 +152,8 @@ async function submitVote(){
     setTimeout(()=>{ resetGate(); }, 5000);
   }catch(e){ showVoteErr('Server error'); }
 }
+
+window.addEventListener('load', startScan); // auto-start camera on load
 </script>
 </body>
 </html>
