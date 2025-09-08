@@ -17,3 +17,26 @@ table{width:100%;border-collapse:collapse;margin-top:12px} th,td{padding:8px;bor
 .qrbox canvas{display:block;margin:0 auto 8px}
 .footer{margin-top:14px;color:#94a3b8}
 .link{color:#93c5fd}
+/* Scanner viewport – tweak height if you want */
+.scanBox {
+  width: 100%;
+  max-width: 480px;
+  height: 300px;          /* <— set your mobile height here */
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Let html5-qrcode elements fill the viewport and crop nicely */
+#reader, 
+#reader video, 
+#reader canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;      /* crop edges instead of stretching */
+}
+
+/* Reduce height a bit on very small screens */
+@media (max-width: 380px) {
+  .scanBox { height: 260px; }
+}

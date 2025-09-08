@@ -54,7 +54,9 @@
 
         <div id="scan" style="margin-top:12px">
           <!-- reader box first -->
-          <div id="reader"></div>
+          <div class="scanBox">
+            <div id="reader"></div>
+          </div>
           <div class="small" id="scanMsg" style="margin-top:6px;text-align:center"></div>
 
           <!-- controls BELOW the reader -->
@@ -223,30 +225,30 @@
     }
 
     async function tryStart(camId, silent=false){
-      const r = byId('reader');
-      if (!r.style.height || (r.clientHeight || 0) < 120) r.style.height = '280px';
-      const w = r.clientWidth || 320;
-      const h = r.clientHeight || 280;
+      const wrap = document.querySelector('.scanBox');
+      const w = (wrap?.clientWidth || 320);
+      const h = (wrap?.clientHeight || 300);
 
       try {
         if (qrObj) { try { await qrObj.stop(); } catch {} }
         qrObj = new Html5Qrcode('reader', { verbose:false });
 
-        const box = Math.min(320, Math.floor(Math.min(w, h) * 0.9));
-        const camConfig = { deviceId: { exact: camId } };
+        // Square scan area ~80% of smallest dimension
+        const size = Math.floor(Math.min(w, h) * 0.8);
 
         await qrObj.start(
-          camConfig,
+          { deviceId: { exact: camId } },
           {
             fps: 10,
-            qrbox: { width: box, height: box },
-            aspectRatio: 1.7778,
+            qrbox: { width: size, height: size },
+            // aspectRatio: 1.7778,   // <-- remove this line
             experimentalFeatures: { useBarCodeDetectorIfSupported: true },
             rememberLastUsedCamera: true
           },
           onScan,
           () => {}
         );
+
         show(byId('stopBtn'), true);
         scanMsg('Camera active. Point at the QR token.');
         return true;
