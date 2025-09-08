@@ -1,6 +1,4 @@
-// api/_lib/redis.js
 import { createClient } from 'redis';
-
 let clientPromise;
 
 export async function getRedis() {

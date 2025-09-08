@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>IPSA Presidential Election Admin</title>
   <link rel="stylesheet" href="/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -22,10 +23,6 @@
     </div>
 
     <div id="dash" style="display:none">
-      <div class="row">
-        <div class="tag">Totals</div>
-        <div id="totals" class="small"></div>
-      </div>
       <div class="hr"></div>
       <h2>Generate tokens</h2>
       <div class="row">
@@ -43,6 +40,23 @@
       <p class="small">Unused tokens left: <span id="unused">-</span></p>
       <div class="hr"></div>
 
+      <h2>Totals</h2>
+      <div class="row">
+        <div>Unused tokens: <strong><span id="unused">0</span></strong></div>
+      </div>
+      <div id="totals" class="small" style="margin-top:6px;"></div>
+
+      <div class="hr"></div>
+      <h2>Live graph</h2>
+      <canvas id="voteChart" height="140"></canvas>
+
+      <div class="hr"></div>
+      <h2>Live votes</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Token</th><th>Role</th><th>Vote</th></tr></thead>
+        <tbody id="voteRows"></tbody>
+      </table>
+      
       <h2>Tokens</h2>
       <div class="row">
         <select id="filterRole" onchange="refreshTokens()">
@@ -56,13 +70,6 @@
         <thead><tr><th>Token</th><th>Role</th><th>Used</th><th></th></tr></thead>
         <tbody id="tokRows"></tbody>
       </table>
-
-      <div class="hr"></div>
-      <h2>Live votes</h2>
-      <table>
-        <thead><tr><th>Time</th><th>Token</th><th>Role</th><th>Vote</th></tr></thead>
-        <tbody id="voteRows"></tbody>
-      </table>
     </div>
     <div id="error" class="bad small"></div>
   </div>
@@ -73,6 +80,8 @@ let ADMIN_KEY = localStorage.getItem('sv_admin') || '';
 window.addEventListener('load',()=>{
   if (ADMIN_KEY) { document.getElementById('adminkey').value = ADMIN_KEY; unlock(); }
 });
+
+let voteChart = null;
 
 function qs(k){ return encodeURIComponent(k); }
 function api(path, opts={}){
@@ -107,12 +116,35 @@ async function refreshSummary(){
   const r = await api('admin/summary');
   const j = await r.json();
   if (!j.ok) return;
+
   document.getElementById('unused').innerText = j.tokens_unused;
+  const male = j.totals.male || {};
+  const female = j.totals.female || {};
+  const mLabels = Object.keys(male);
+  const fLabels = Object.keys(female);
+  const labels = Array.from(new Set([...mLabels, ...fLabels]));
+
+  const mData = labels.map(k => male[k] || 0);
+  const fData = labels.map(k => female[k] || 0);
+
   const t = [];
-  t.push('Male: ' + Object.entries(j.totals.male).map(([k,v])=>`${k}=${v}`).join(' · '));
-  t.push('Female: ' + Object.entries(j.totals.female).map(([k,v])=>`${k}=${v}`).join(' · '));
+  t.push('Male: ' + Object.entries(male).map(([k,v])=>`${k}=${v}`).join(' · '));
+  t.push('Female: ' + Object.entries(female).map(([k,v])=>`${k}=${v}`).join(' · '));
   t.push('Tokens total=' + j.tokens_total);
   document.getElementById('totals').innerText = t.join(' | ');
+
+  const ctx = document.getElementById('voteChart').getContext('2d');
+  const data = {
+    labels,
+    datasets: [
+      { label: 'Male',   data: mData },
+      { label: 'Female', data: fData }
+    ]
+  };
+  const opt = { responsive:true, maintainAspectRatio:false };
+
+  if (voteChart) { voteChart.data = data; voteChart.update(); }
+  else { voteChart = new Chart(ctx, { type:'bar', data, options:opt }); }
 }
 
 async function refreshTokens(){
@@ -153,7 +185,7 @@ async function genTokens(){
 }
 
 function openQR(){
-  window.open('/qr?admin_key='+qs(ADMIN_KEY), '_blank');
+  window.open('/qr.html?admin_key='+qs(ADMIN_KEY), '_blank');
 }
 
 function downloadCSV(){
@@ -162,10 +194,15 @@ function downloadCSV(){
 
 async function resetAll(){
   if (!confirm('Really reset ALL tokens and votes?')) return;
-  const r = await api('admin/reset_all',{ method:'POST' });
-  const j = await r.json();
-  if (!j.ok) return alert(j.error||'Error');
-  refreshAll();
+  try {
+    const r = await api('admin/reset_all',{ method:'POST' });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error||'Server error');
+    alert('All tokens and votes removed.');
+    refreshAll();
+  } catch(e) {
+    alert('Reset failed: ' + (e.message||e));
+  }
 }
 
 async function delToken(t){
