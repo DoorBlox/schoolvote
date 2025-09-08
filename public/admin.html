@@ -6,6 +6,11 @@
   <title>IPSA Presidential Election Admin</title>
   <link rel="stylesheet" href="/style.css"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    /* safety cap */
+    #chartWrap { max-height: 300px; }
+    #voteChart { width: 100%; height: 100%; }
+  </style>
 </head>
 <body>
 <div class="container">
@@ -48,7 +53,9 @@
 
       <div class="hr"></div>
       <h2>Live graph</h2>
-      <canvas id="voteChart" height="140"></canvas>
+      <div id="chartWrap" style="height:260px;">
+        <canvas id="voteChart"></canvas>
+      </div>
 
       <div class="hr"></div>
       <h2>Live votes</h2>
@@ -81,8 +88,6 @@ window.addEventListener('load',()=>{
   if (ADMIN_KEY) { document.getElementById('adminkey').value = ADMIN_KEY; unlock(); }
 });
 
-let voteChart = null;
-
 function qs(k){ return encodeURIComponent(k); }
 function api(path, opts={}){
   const u = `/api/${path}${path.includes('?')?'&':'?'}admin_key=${qs(ADMIN_KEY)}`;
@@ -107,6 +112,23 @@ async function unlock(){
     document.getElementById('unlockMsg').innerText = 'Server error.';
   }
 }
+
+let voteChart = null;
+let refreshTimer = null;
+let lastSig = ''; // to avoid redraws when nothing changed
+
+// Call this once after successful unlock:
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshAll(); // initial
+  refreshTimer = setInterval(refreshAll, 4000);
+}
+
+// Optional: if you navigate away / hot-reload admin
+window.addEventListener('beforeunload', () => {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (voteChart?.destroy) voteChart.destroy();
+});
 
 async function refreshAll(){
   await Promise.all([refreshSummary(), refreshTokens(), refreshVotes()]);
