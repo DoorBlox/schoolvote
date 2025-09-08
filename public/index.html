@@ -1,41 +1,91 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>IPSA Presidential Election</title>
+
+  <!-- Your site styles -->
   <link rel="stylesheet" href="/style.css"/>
+
+  <!-- QR library -->
   <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+
+  <!-- Minimal extras just for this page -->
+  <style>
+    /* Header logos */
+    .logos {
+      display: flex; align-items: center; justify-content: center;
+      gap: 16px; margin-bottom: 10px;
+    }
+    .logos img {
+      height: 42px; width: auto; object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,.2));
+    }
+    /* QR reader box: must have a real height! */
+    #reader { width: 100%; max-width: 480px; height: 280px; margin: 0 auto; }
+    /* Small helper classes if your style.css doesn't have them */
+    .small { font-size: 0.9rem; opacity: .85 }
+    .bad { color: #ff6b6b }
+    .link { color: #7c9cff; text-decoration: underline; }
+  </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
+
+      <!-- Logos row -->
+      <div class="logos">
+        <!-- Replace paths or use external URLs if you prefer -->
+        <img src="/ipsa-logo.png" alt="IPSA logo" onerror="this.style.display='none'"/>
+        <img src="/school-logo.png" alt="School logo" onerror="this.style.display='none'"/>
+      </div>
+
       <h1>IPSA Presidential Election</h1>
       <div class="small">school vote app made by hisyam - 4ever - ©2025</div>
       <div class="hr"></div>
 
-      <!-- In-app browser warning injected by script if needed -->
+      <!-- In-app browser warning is injected below if needed -->
 
+      <!-- Gate -->
       <div id="gate">
         <p>Scan your token QR or type your token:</p>
+
         <div class="row">
           <input id="token" placeholder="Enter token manually" style="flex:1"/>
           <button id="manualBtn" onclick="continueToken()">Continue</button>
         </div>
 
         <div id="scan" style="margin-top:12px">
-          <div class="row" style="gap:8px;margin-bottom:8px">
+          <div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
             <select id="cameraSel" style="display:none"></select>
             <button id="startBtn" style="display:none" onclick="startScan()">Start camera</button>
             <button id="stopBtn" style="display:none;background:#374151" onclick="stopScan()">Stop</button>
           </div>
-          <div id="reader" style="width:320px;height:auto"></div>
-          <div class="small" id="scanMsg"></div>
+
+          <!-- The reader MUST have a fixed height -->
+          <div id="reader"></div>
+          <div class="small" id="scanMsg" style="margin-top:6px"></div>
         </div>
 
-        <div id="err" class="bad small"></div>
+        <div id="err" class="bad small" style="margin-top:8px"></div>
+
+        <!-- Optional quick help -->
+        <details style="margin-top:10px">
+          <summary class="small">Camera help</summary>
+          <div class="small" style="margin-top:6px">
+            If camera doesn’t start:
+            <ul style="margin:6px 0 0 16px">
+              <li>Open this page in Safari/Chrome (not an in-app browser).</li>
+              <li>Grant camera permission for this site.</li>
+              <li>Tap <b>Start camera</b> if auto-start is blocked.</li>
+              <li>Try switching camera using the selector.</li>
+            </ul>
+          </div>
+        </details>
       </div>
 
+      <!-- Ballot -->
       <div id="ballot" style="display:none">
         <h2 id="roleHeadline"></h2>
         <div id="choices"></div>
@@ -43,9 +93,10 @@
           <button onclick="submitVote()">Submit vote</button>
           <button onclick="resetGate()">Cancel</button>
         </div>
-        <div id="voteErr" class="bad small"></div>
+        <div id="voteErr" class="bad small" style="margin-top:6px"></div>
       </div>
 
+      <!-- Thanks -->
       <div id="thanks" style="display:none">
         <h2>Thank you!</h2>
         <p class="small">Your vote was recorded. Returning to gate…</p>
@@ -53,234 +104,250 @@
     </div>
   </div>
 
-<script>
-/* ---------- In-app browser notice (camera often blocked there) ---------- */
-(function () {
-  const ua = navigator.userAgent || '';
-  const inApp = /(FBAN|FBAV|Instagram|Line|WeChat|FB_IAB|Twitter|TikTok)/i.test(ua);
-  if (inApp) {
-    const msg = document.createElement('div');
-    msg.className = 'card';
-    msg.style.marginBottom = '12px';
-    msg.innerHTML = `
-      <div class="bad small">
-        You’re using an in-app browser that may block the camera.
-        Please open this page in Safari/Chrome.
-        <div style="margin-top:8px">
-          <a class="link" href="${location.href}" target="_blank" rel="noopener">Open in your browser</a>
-        </div>
-      </div>`;
-    document.querySelector('.container')?.prepend(msg);
-  }
-})();
-</script>
+  <!-- In-app browser notice (camera often blocked there) -->
+  <script>
+    (function () {
+      const ua = navigator.userAgent || '';
+      const inApp = /(FBAN|FBAV|Instagram|Line|WeChat|FB_IAB|Twitter|TikTok)/i.test(ua);
+      if (!inApp) return;
+      const msg = document.createElement('div');
+      msg.className = 'card';
+      msg.style.marginBottom = '12px';
+      msg.innerHTML = `
+        <div class="bad small">
+          You’re using an in-app browser that may block the camera.
+          Please open this page in Safari/Chrome.
+          <div style="margin-top:8px">
+            <a class="link" href="${location.href}" target="_blank" rel="noopener">Open in your browser</a>
+          </div>
+        </div>`;
+      document.querySelector('.container')?.prepend(msg);
+    })();
+  </script>
 
-<script>
-/* ---------- State ---------- */
-let tokenValue = '';
-let ballotRule = '';
-let maleCandidates = [], femaleCandidates = [];
-let qrObj = null;
-let cameras = [];
-let currentCamId = null;
+  <!-- Main page logic -->
+  <script>
+    /* --------- State --------- */
+    let tokenValue = '';
+    let ballotRule = '';
+    let maleCandidates = [], femaleCandidates = [];
+    let qrObj = null;
+    let cameras = [];
+    let currentCamId = null;
 
-/* ---------- Utils ---------- */
-function byId(id){ return document.getElementById(id); }
-function show(el, on){ if (!el) return; el.style.display = on ? '' : 'none'; }
-function showErr(m){ byId('err').innerText = m || ''; }
-function showVoteErr(m){ byId('voteErr').innerText = m || ''; }
-function scanMsg(m){ byId('scanMsg').innerText = m || ''; }
+    /* --------- Utils --------- */
+    const byId = (id) => document.getElementById(id);
+    const show = (el, on) => { if (el) el.style.display = on ? '' : 'none'; };
+    const showErr = (m) => { byId('err').innerText = m || ''; };
+    const showVoteErr = (m) => { byId('voteErr').innerText = m || ''; };
+    const scanMsg = (m) => { byId('scanMsg').innerText = m || ''; };
 
-/* ---------- Camera flow ---------- */
-async function initScanUI(){
-  // Hide UI bits until ready
-  show(byId('startBtn'), false);
-  show(byId('stopBtn'), false);
-  show(byId('cameraSel'), false);
+    /* --------- Camera flow --------- */
+    async function initScanUI(){
+      // Reset UI elements
+      show(byId('startBtn'), false);
+      show(byId('stopBtn'), false);
+      show(byId('cameraSel'), false);
+      // Make sure reader has a real height (prevents start errors)
+      byId('reader').style.height = '280px';
 
-  // HTTPS hint
-  if (!window.isSecureContext) {
-    scanMsg('Open this page over HTTPS to use the camera. You can still type the token.');
-    return;
-  }
-
-  scanMsg('Preparing camera…');
-  try {
-    if (!window.Html5Qrcode) throw new Error('QR library not loaded');
-
-    // Enumerate cameras
-    cameras = await Html5Qrcode.getCameras();
-
-    if (!cameras || !cameras.length) {
-      scanMsg('No camera found. You can type the token instead.');
-      return;
-    }
-
-    // Prefer a back camera if label hints it
-    const rear = cameras.find(c => /back|rear|environment/i.test(c.label));
-    currentCamId = (rear || cameras[0]).id;
-
-    // Populate selector if >1 camera
-    const sel = byId('cameraSel');
-    sel.innerHTML = '';
-    if (cameras.length > 1) {
-      for (const c of cameras) {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.label || 'Camera';
-        if (c.id === currentCamId) opt.selected = true;
-        sel.appendChild(opt);
+      if (!window.isSecureContext) {
+        scanMsg('Open this page over HTTPS to use the camera. You can still type the token.');
+        return;
       }
-      sel.onchange = () => { currentCamId = sel.value; restartScan(); };
-      show(sel, true);
+
+      scanMsg('Preparing camera…');
+      try {
+        if (!window.Html5Qrcode) throw new Error('QR library not loaded');
+
+        cameras = await Html5Qrcode.getCameras();
+        if (!cameras || !cameras.length) {
+          scanMsg('No camera found. You can type the token instead.');
+          return;
+        }
+
+        // Prefer a back camera
+        const rear = cameras.find(c => /back|rear|environment/i.test(c.label));
+        currentCamId = (rear || cameras[0]).id;
+
+        // Camera selector if multiple
+        const sel = byId('cameraSel');
+        sel.innerHTML = '';
+        if (cameras.length > 1) {
+          for (const c of cameras) {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.label || 'Camera';
+            if (c.id === currentCamId) opt.selected = true;
+            sel.appendChild(opt);
+          }
+          sel.onchange = () => { currentCamId = sel.value; restartScan(); };
+          show(sel, true);
+        }
+
+        // Try auto-start (some browsers require a tap)
+        const ok = await tryStart(currentCamId, true);
+        if (!ok) {
+          show(byId('startBtn'), true);
+          scanMsg('Tap “Start camera” to begin scanning.');
+        }
+      } catch (e) {
+        console.log(e);
+        scanMsg('Unable to access camera. Open in Safari/Chrome (not an in-app browser), ensure HTTPS, and allow camera permission. You can still type the token.');
+        show(byId('startBtn'), true);
+      }
     }
 
-    // Try to auto-start; if the browser requires a gesture, show Start button
-    const ok = await tryStart(currentCamId, true);
-    if (!ok) {
-      show(byId('startBtn'), true);
-      scanMsg('Tap “Start camera” to begin scanning.');
+    async function tryStart(camId, silent=false){
+      const r = byId('reader');
+      // Ensure non-zero size
+      if (!r.style.height || (r.clientHeight || 0) < 120) r.style.height = '280px';
+      const w = r.clientWidth || 320;
+      const h = r.clientHeight || 280;
+
+      try {
+        // Stop any previous instance first
+        if (qrObj) { try { await qrObj.stop(); } catch {} }
+        qrObj = new Html5Qrcode('reader', { verbose: false });
+
+        const box = Math.min(320, Math.floor(Math.min(w, h) * 0.9));
+        const camConfig = { deviceId: { exact: camId } };
+
+        await qrObj.start(
+          camConfig,
+          {
+            fps: 10,
+            qrbox: { width: box, height: box },
+            aspectRatio: 1.7778,  // helps some Androids
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+            rememberLastUsedCamera: true
+          },
+          onScan,
+          () => {} // ignore per-frame failures
+        );
+
+        show(byId('stopBtn'), true);
+        scanMsg('Camera active. Point at the QR token.');
+        return true;
+      } catch (e) {
+        console.log('start error', e);
+        const msg = (e && (e.message || e.name)) ? `Could not start camera: ${e.message || e.name}` : 'Could not start camera.';
+        if (!silent) scanMsg(msg + ' Tap “Start camera” or try another browser.');
+        return false;
+      }
     }
-  } catch (e) {
-    console.log(e);
-    scanMsg('Unable to access camera. Open in Safari/Chrome (not an in-app browser), ensure HTTPS, and allow camera permission. You can still type the token.');
-    show(byId('startBtn'), true);
-  }
-}
 
-async function tryStart(camId, silent=false){
-  try {
-    // If a previous instance is running, stop it before starting a new one
-    if (qrObj) {
-      try { await qrObj.stop(); } catch {}
+    async function startScan(){
+      show(byId('startBtn'), false);
+      const ok = await tryStart(currentCamId, false);
+      if (!ok) show(byId('startBtn'), true);
     }
-    qrObj = new Html5Qrcode('reader');
 
-    await qrObj.start(
-      camId,
-      { fps: 10, qrbox: 220 },
-      onScan,
-      () => {} // onScanFailure noop
-    );
-    show(byId('stopBtn'), true);
-    scanMsg('Camera active. Point at the QR token.');
-    return true;
-  } catch (e) {
-    console.log('start error', e);
-    if (!silent) scanMsg('Could not start camera. Tap “Start camera” or try another browser.');
-    return false;
-  }
-}
+    async function stopScan(){
+      if (qrObj) { try { await qrObj.stop(); } catch {} }
+      show(byId('stopBtn'), false);
+    }
 
-async function startScan(){
-  show(byId('startBtn'), false);
-  const ok = await tryStart(currentCamId, false);
-  if (!ok) show(byId('startBtn'), true);
-}
+    async function restartScan(){
+      await stopScan();
+      setTimeout(()=> startScan(), 150);
+    }
 
-async function stopScan(){
-  if (qrObj) {
-    try { await qrObj.stop(); } catch {}
-  }
-  show(byId('stopBtn'), false);
-}
+    function onScan(decoded){
+      tokenValue = (decoded || '').trim();
+      if (!tokenValue) return;
+      stopScan();
+      byId('token').value = tokenValue;
+      continueToken();
+    }
 
-async function restartScan(){
-  await stopScan();
-  setTimeout(()=> startScan(), 150);
-}
+    /* --------- Gate & ballot --------- */
+    async function continueToken(){
+      tokenValue = byId('token').value.trim();
+      if (!tokenValue) return showErr('Enter a token');
+      showErr('');
+      try{
+        const r = await fetch('/api/public/validate_token', {
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body: JSON.stringify({ token: tokenValue })
+        });
+        const j = await r.json();
+        if (!j.ok) return showErr(j.error || 'Server error');
 
-function onScan(decoded){
-  tokenValue = (decoded || '').trim();
-  if (!tokenValue) return;
-  stopScan();
-  byId('token').value = tokenValue;
-  continueToken();
-}
+        ballotRule = j.rule;
+        maleCandidates = j.maleCandidates || [];
+        femaleCandidates = j.femaleCandidates || [];
+        renderBallot(j.role);
+      }catch(e){
+        console.log(e);
+        showErr('Server error');
+      }
+    }
 
-/* ---------- Gate & ballot flow ---------- */
-async function continueToken(){
-  tokenValue = byId('token').value.trim();
-  if (!tokenValue) return showErr('Enter a token');
-  showErr('');
-  try{
-    const r = await fetch('/api/public/validate_token', {
-      method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({ token: tokenValue })
-    });
-    const j = await r.json();
-    if (!j.ok) return showErr(j.error || 'Server error');
+    function renderBallot(role){
+      byId('gate').style.display='none';
+      byId('ballot').style.display='block';
+      const h = byId('roleHeadline');
+      const wrap = byId('choices');
+      wrap.innerHTML = ''; showVoteErr('');
 
-    ballotRule = j.rule;
-    maleCandidates = j.maleCandidates || [];
-    femaleCandidates = j.femaleCandidates || [];
-    renderBallot(j.role);
-  }catch(e){
-    console.log(e);
-    showErr('Server error');
-  }
-}
+      if (role === 'male'){
+        h.innerText = 'Choose ONE male candidate';
+        wrap.innerHTML = maleCandidates.map(c=>`<label><input type="radio" name="male" value="${c}"> ${c}</label><br>`).join('');
+      } else if (role === 'female'){
+        h.innerText = 'Choose ONE female candidate';
+        wrap.innerHTML = femaleCandidates.map(c=>`<label><input type="radio" name="female" value="${c}"> ${c}</label><br>`).join('');
+      } else {
+        h.innerText = 'Choose ONE male and ONE female candidate';
+        wrap.innerHTML = `
+          <div><strong>Male</strong><br>${maleCandidates.map(c=>`<label><input type="radio" name="male" value="${c}"> ${c}</label><br>`).join('')}</div>
+          <div style="height:8px"></div>
+          <div><strong>Female</strong><br>${femaleCandidates.map(c=>`<label><input type="radio" name="female" value="${c}"> ${c}</label><br>`).join('')}</div>
+        `;
+      }
+    }
 
-function renderBallot(role){
-  byId('gate').style.display='none';
-  byId('ballot').style.display='block';
-  const h = byId('roleHeadline');
-  const wrap = byId('choices');
-  wrap.innerHTML = ''; showVoteErr('');
+    function resetGate(){
+      stopScan();
+      byId('ballot').style.display='none';
+      byId('thanks').style.display='none';
+      byId('gate').style.display='block';
+      byId('token').value='';
+      tokenValue=''; ballotRule='';
+      initScanUI(); // prepare camera again
+    }
 
-  if (role === 'male'){
-    h.innerText = 'Choose ONE male candidate';
-    wrap.innerHTML = maleCandidates.map(c=>`<label><input type="radio" name="male" value="${c}"> ${c}</label><br>`).join('');
-  } else if (role === 'female'){
-    h.innerText = 'Choose ONE female candidate';
-    wrap.innerHTML = femaleCandidates.map(c=>`<label><input type="radio" name="female" value="${c}"> ${c}</label><br>`).join('');
-  } else {
-    h.innerText = 'Choose ONE male and ONE female candidate';
-    wrap.innerHTML = `
-      <div><strong>Male</strong><br>${maleCandidates.map(c=>`<label><input type="radio" name="male" value="${c}"> ${c}</label><br>`).join('')}</div>
-      <div style="height:8px"></div>
-      <div><strong>Female</strong><br>${femaleCandidates.map(c=>`<label><input type="radio" name="female" value="${c}"> ${c}</label><br>`).join('')}</div>
-    `;
-  }
-}
+    async function submitVote(){
+      const male = document.querySelector('input[name="male"]:checked')?.value;
+      const female = document.querySelector('input[name="female"]:checked')?.value;
 
-function resetGate(){
-  stopScan();
-  byId('ballot').style.display='none';
-  byId('thanks').style.display='none';
-  byId('gate').style.display='block';
-  byId('token').value='';
-  tokenValue=''; ballotRule='';
-  initScanUI(); // re-prepare camera UI
-}
+      if (ballotRule==='vote_one_male' && !male) return showVoteErr('Pick one male candidate');
+      if (ballotRule==='vote_one_female' && !female) return showVoteErr('Pick one female candidate');
+      if (ballotRule==='vote_one_each' && (!male || !female)) return showVoteErr('Pick one male and one female');
 
-async function submitVote(){
-  const male = document.querySelector('input[name="male"]:checked')?.value;
-  const female = document.querySelector('input[name="female"]:checked')?.value;
+      try{
+        const r = await fetch('/api/public/submit_vote', {
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body: JSON.stringify({ token: tokenValue, male, female })
+        });
+        const j = await r.json();
+        if (!j.ok) return showVoteErr(j.error || 'Server error');
 
-  if (ballotRule==='vote_one_male' && !male) return showVoteErr('Pick one male candidate');
-  if (ballotRule==='vote_one_female' && !female) return showVoteErr('Pick one female candidate');
-  if (ballotRule==='vote_one_each' && (!male || !female)) return showVoteErr('Pick one male and one female');
+        byId('ballot').style.display='none';
+        byId('thanks').style.display='block';
+        setTimeout(()=>{ resetGate(); }, 5000);
+      }catch(e){
+        console.log(e);
+        showVoteErr('Server error');
+      }
+    }
 
-  try{
-    const r = await fetch('/api/public/submit_vote', {
-      method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({ token: tokenValue, male, female })
-    });
-    const j = await r.json();
-    if (!j.ok) return showVoteErr(j.error || 'Server error');
-
-    byId('ballot').style.display='none';
-    byId('thanks').style.display='block';
-    setTimeout(()=>{ resetGate(); }, 5000);
-  }catch(e){
-    console.log(e);
-    showVoteErr('Server error');
-  }
-}
-
-/* ---------- Boot ---------- */
-window.addEventListener('load', initScanUI);
-</script>
+    /* --------- Boot --------- */
+    window.addEventListener('load', initScanUI);
+    // Clean up if the user leaves
+    window.addEventListener('beforeunload', () => { try { if (qrObj) qrObj.stop(); } catch {} });
+  </script>
 </body>
 </html>
