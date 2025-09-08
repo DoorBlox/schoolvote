@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>QR Sheet</title>
   <link rel="stylesheet" href="/style.css"/>
+  <!-- Primary QR lib -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body>
@@ -18,24 +19,61 @@
 </div>
 <script>
 const params = new URLSearchParams(location.search);
-const ADMIN_KEY = params.get('admin_key')||'';
-function qs(k){ return encodeURIComponent(k); }
+const ADMIN_KEY = params.get('admin_key') || '';
+
+function qs(x){ return encodeURIComponent(x); }
+
+function makeQR(el, text) {
+  // Try canvas QR; fallback to image if the lib isn’t available
+  try {
+    const c = document.createElement('canvas');
+    el.appendChild(c);
+    if (window.QRCode) {
+      QRCode.toCanvas(c, text, { width: 160 }, (err)=>{
+        if (err) { c.remove(); fallbackImg(); }
+      });
+    } else {
+      c.remove();
+      fallbackImg();
+    }
+  } catch {
+    fallbackImg();
+  }
+  function fallbackImg() {
+    const img = document.createElement('img');
+    img.alt = 'QR';
+    // Public QR API fallback (works fine for printing)
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${qs(text)}`;
+    el.appendChild(img);
+  }
+}
 
 async function loadTokens(){
-  const r = await fetch('/api/admin/list_tokens?admin_key='+qs(ADMIN_KEY));
-  const j = await r.json();
-  if (!j.ok) return alert('Unauthorized or error');
-  const wrap = document.getElementById('wrap');
-  for (const it of j.items) {
-    const d = document.createElement('div');
-    d.className='qrbox';
-    const c = document.createElement('canvas');
-    d.appendChild(c);
-    const p = document.createElement('div');
-    p.innerHTML = `<strong>${it.token}</strong><br><span class="small">${it.role}${it.used?' (used)':''}</span>`;
-    d.appendChild(p);
-    wrap.appendChild(d);
-    QRCode.toCanvas(c, it.token, { width: 160 });
+  try {
+    const r = await fetch('/api/admin/list_tokens?admin_key='+qs(ADMIN_KEY));
+    const j = await r.json();
+    if (!j.ok) return alert(j.error || 'Unauthorized');
+    const wrap = document.getElementById('wrap');
+    wrap.innerHTML = '';
+
+    // Render ALL tokens (sorted on the API side already, but sort again just in case)
+    const items = (j.items || []).sort((a,b)=>a.token.localeCompare(b.token));
+    if (!items.length) {
+      wrap.innerHTML = '<div class="small">No tokens yet. Generate some from the admin page.</div>';
+      return;
+    }
+
+    for (const it of items) {
+      const d = document.createElement('div');
+      d.className='qrbox';
+      makeQR(d, it.token);
+      const p = document.createElement('div');
+      p.innerHTML = `<strong>${it.token}</strong><br><span class="small">${it.role}${it.used?' (used)':''}</span>`;
+      d.appendChild(p);
+      wrap.appendChild(d);
+    }
+  } catch (e) {
+    alert('Failed to load tokens (network).');
   }
 }
 loadTokens();
