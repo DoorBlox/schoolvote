@@ -124,18 +124,32 @@
   <!-- Main page logic -->
   <script>
     /* ---------- Robust loader for html5-qrcode (tries 3 CDNs) ---------- */
-    function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.async=true;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+    function loadScript(src){
+      return new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = src; s.async = true;
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+
     async function ensureQrLib(){
       if (window.Html5Qrcode) return true;
       const urls = [
-        'https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js',
-        'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/html5-qrcode.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.10/html5-qrcode.min.js'
+        '/vendor/html5-qrcode.min.js',  // <-- local first
+        'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
+        'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
       ];
       for (const u of urls){
-        try { await loadScript(u); if (window.Html5Qrcode) return true; } catch {}
+        try {
+          await loadScript(u);
+          if (window.Html5Qrcode) return true;
+        } catch (e) {
+          console.log('QR lib load failed:', u, e);
+        }
       }
-      return !!window.Html5Qrcode;
+      return false;
     }
 
     /* ---------- State ---------- */

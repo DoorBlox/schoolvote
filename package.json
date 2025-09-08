@@ -11,5 +11,19 @@
   },
   "scripts": {
     "dev": "vercel dev"
-  }
+  },
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DoorBlox/schoolvote.git"
+  },
+  "keywords": [],
+  "author": "DoorBlox/Hisyam",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DoorBlox/schoolvote/issues"
+  },
+  "homepage": "https://github.com/DoorBlox/schoolvote#readme",
+  "description": ""
 }
