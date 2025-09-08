@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8">
+<title>Camera Diagnostic</title>
+<body style="font-family:system-ui;padding:16px">
+<h2>Camera Diagnostic</h2>
+<div id="out"></div>
+<script>
+const out = (m)=>document.getElementById('out').innerHTML += `<div>${m}</div>`;
+out(`Origin: ${location.origin}`);
+out(`Protocol: ${location.protocol}`);
+out(`Secure context: ${window.isSecureContext}`);
+
+(async () => {
+  if (!navigator.mediaDevices?.getUserMedia) { out('getUserMedia not supported'); return; }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === 'videoinput');
+    out('Cameras: ' + cams.map(c=>c.label||'(no label)').join(', ') || 'none');
+  } catch (e) { out('enumerateDevices error: ' + e.message); }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    out('getUserMedia OK');
+    stream.getTracks().forEach(t => t.stop());
+  } catch (e) {
+    out('getUserMedia ERROR: ' + (e.name || e.message));
+  }
+})();
+</script>
+</body>
