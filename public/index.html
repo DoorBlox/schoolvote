@@ -14,16 +14,25 @@
       <div class="small">school vote app made by hisyam - 4ever - ©2025</div>
       <div class="hr"></div>
 
+      <!-- In-app browser warning injected by script if needed -->
+
       <div id="gate">
         <p>Scan your token QR or type your token:</p>
         <div class="row">
           <input id="token" placeholder="Enter token manually" style="flex:1"/>
           <button id="manualBtn" onclick="continueToken()">Continue</button>
         </div>
+
         <div id="scan" style="margin-top:12px">
+          <div class="row" style="gap:8px;margin-bottom:8px">
+            <select id="cameraSel" style="display:none"></select>
+            <button id="startBtn" style="display:none" onclick="startScan()">Start camera</button>
+            <button id="stopBtn" style="display:none;background:#374151" onclick="stopScan()">Stop</button>
+          </div>
           <div id="reader" style="width:320px;height:auto"></div>
           <div class="small" id="scanMsg"></div>
         </div>
+
         <div id="err" class="bad small"></div>
       </div>
 
@@ -45,44 +54,153 @@
   </div>
 
 <script>
+/* ---------- In-app browser notice (camera often blocked there) ---------- */
+(function () {
+  const ua = navigator.userAgent || '';
+  const inApp = /(FBAN|FBAV|Instagram|Line|WeChat|FB_IAB|Twitter|TikTok)/i.test(ua);
+  if (inApp) {
+    const msg = document.createElement('div');
+    msg.className = 'card';
+    msg.style.marginBottom = '12px';
+    msg.innerHTML = `
+      <div class="bad small">
+        You’re using an in-app browser that may block the camera.
+        Please open this page in Safari/Chrome.
+        <div style="margin-top:8px">
+          <a class="link" href="${location.href}" target="_blank" rel="noopener">Open in your browser</a>
+        </div>
+      </div>`;
+    document.querySelector('.container')?.prepend(msg);
+  }
+})();
+</script>
+
+<script>
+/* ---------- State ---------- */
 let tokenValue = '';
 let ballotRule = '';
-let maleCandidates=[], femaleCandidates=[];
+let maleCandidates = [], femaleCandidates = [];
 let qrObj = null;
+let cameras = [];
+let currentCamId = null;
 
-function showErr(m){ document.getElementById('err').innerText = m||''; }
-function showVoteErr(m){ document.getElementById('voteErr').innerText = m||''; }
-function scanMsg(m){ document.getElementById('scanMsg').innerText = m||''; }
+/* ---------- Utils ---------- */
+function byId(id){ return document.getElementById(id); }
+function show(el, on){ if (!el) return; el.style.display = on ? '' : 'none'; }
+function showErr(m){ byId('err').innerText = m || ''; }
+function showVoteErr(m){ byId('voteErr').innerText = m || ''; }
+function scanMsg(m){ byId('scanMsg').innerText = m || ''; }
 
-async function startScan(){
+/* ---------- Camera flow ---------- */
+async function initScanUI(){
+  // Hide UI bits until ready
+  show(byId('startBtn'), false);
+  show(byId('stopBtn'), false);
+  show(byId('cameraSel'), false);
+
+  // HTTPS hint
+  if (!window.isSecureContext) {
+    scanMsg('Open this page over HTTPS to use the camera. You can still type the token.');
+    return;
+  }
+
+  scanMsg('Preparing camera…');
   try {
     if (!window.Html5Qrcode) throw new Error('QR library not loaded');
-    qrObj = new Html5Qrcode('reader');
-    const devices = await Html5Qrcode.getCameras();
-    const id = devices?.[0]?.id;
-    if (!id) { scanMsg('No camera found. You can type the token instead.'); return; }
-    scanMsg('Camera active. Point at the QR token.');
-    await qrObj.start(id, { fps:10, qrbox: 200 }, onScan);
+
+    // Enumerate cameras
+    cameras = await Html5Qrcode.getCameras();
+
+    if (!cameras || !cameras.length) {
+      scanMsg('No camera found. You can type the token instead.');
+      return;
+    }
+
+    // Prefer a back camera if label hints it
+    const rear = cameras.find(c => /back|rear|environment/i.test(c.label));
+    currentCamId = (rear || cameras[0]).id;
+
+    // Populate selector if >1 camera
+    const sel = byId('cameraSel');
+    sel.innerHTML = '';
+    if (cameras.length > 1) {
+      for (const c of cameras) {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.label || 'Camera';
+        if (c.id === currentCamId) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.onchange = () => { currentCamId = sel.value; restartScan(); };
+      show(sel, true);
+    }
+
+    // Try to auto-start; if the browser requires a gesture, show Start button
+    const ok = await tryStart(currentCamId, true);
+    if (!ok) {
+      show(byId('startBtn'), true);
+      scanMsg('Tap “Start camera” to begin scanning.');
+    }
   } catch (e) {
-    scanMsg('Unable to start camera; type the token instead.');
     console.log(e);
+    scanMsg('Unable to access camera. Open in Safari/Chrome (not an in-app browser), ensure HTTPS, and allow camera permission. You can still type the token.');
+    show(byId('startBtn'), true);
   }
 }
 
-function stopScan(){
-  if (qrObj) try { qrObj.stop().catch(()=>{}); } catch {}
+async function tryStart(camId, silent=false){
+  try {
+    // If a previous instance is running, stop it before starting a new one
+    if (qrObj) {
+      try { await qrObj.stop(); } catch {}
+    }
+    qrObj = new Html5Qrcode('reader');
+
+    await qrObj.start(
+      camId,
+      { fps: 10, qrbox: 220 },
+      onScan,
+      () => {} // onScanFailure noop
+    );
+    show(byId('stopBtn'), true);
+    scanMsg('Camera active. Point at the QR token.');
+    return true;
+  } catch (e) {
+    console.log('start error', e);
+    if (!silent) scanMsg('Could not start camera. Tap “Start camera” or try another browser.');
+    return false;
+  }
+}
+
+async function startScan(){
+  show(byId('startBtn'), false);
+  const ok = await tryStart(currentCamId, false);
+  if (!ok) show(byId('startBtn'), true);
+}
+
+async function stopScan(){
+  if (qrObj) {
+    try { await qrObj.stop(); } catch {}
+  }
+  show(byId('stopBtn'), false);
+}
+
+async function restartScan(){
+  await stopScan();
+  setTimeout(()=> startScan(), 150);
 }
 
 function onScan(decoded){
-  tokenValue = (decoded||'').trim();
+  tokenValue = (decoded || '').trim();
   if (!tokenValue) return;
   stopScan();
-  document.getElementById('token').value = tokenValue;
+  byId('token').value = tokenValue;
   continueToken();
 }
 
+/* ---------- Gate & ballot flow ---------- */
 async function continueToken(){
-  tokenValue = document.getElementById('token').value.trim();
+  tokenValue = byId('token').value.trim();
   if (!tokenValue) return showErr('Enter a token');
   showErr('');
   try{
@@ -92,18 +210,22 @@ async function continueToken(){
     });
     const j = await r.json();
     if (!j.ok) return showErr(j.error || 'Server error');
+
     ballotRule = j.rule;
-    maleCandidates = j.maleCandidates;
-    femaleCandidates = j.femaleCandidates;
+    maleCandidates = j.maleCandidates || [];
+    femaleCandidates = j.femaleCandidates || [];
     renderBallot(j.role);
-  }catch(e){ showErr('Server error'); }
+  }catch(e){
+    console.log(e);
+    showErr('Server error');
+  }
 }
 
 function renderBallot(role){
-  document.getElementById('gate').style.display='none';
-  document.getElementById('ballot').style.display='block';
-  const h = document.getElementById('roleHeadline');
-  const wrap = document.getElementById('choices');
+  byId('gate').style.display='none';
+  byId('ballot').style.display='block';
+  const h = byId('roleHeadline');
+  const wrap = byId('choices');
   wrap.innerHTML = ''; showVoteErr('');
 
   if (role === 'male'){
@@ -124,12 +246,12 @@ function renderBallot(role){
 
 function resetGate(){
   stopScan();
-  document.getElementById('ballot').style.display='none';
-  document.getElementById('thanks').style.display='none';
-  document.getElementById('gate').style.display='block';
-  document.getElementById('token').value='';
+  byId('ballot').style.display='none';
+  byId('thanks').style.display='none';
+  byId('gate').style.display='block';
+  byId('token').value='';
   tokenValue=''; ballotRule='';
-  startScan(); // re-arm camera when back to gate
+  initScanUI(); // re-prepare camera UI
 }
 
 async function submitVote(){
@@ -147,13 +269,18 @@ async function submitVote(){
     });
     const j = await r.json();
     if (!j.ok) return showVoteErr(j.error || 'Server error');
-    document.getElementById('ballot').style.display='none';
-    document.getElementById('thanks').style.display='block';
+
+    byId('ballot').style.display='none';
+    byId('thanks').style.display='block';
     setTimeout(()=>{ resetGate(); }, 5000);
-  }catch(e){ showVoteErr('Server error'); }
+  }catch(e){
+    console.log(e);
+    showVoteErr('Server error');
+  }
 }
 
-window.addEventListener('load', startScan); // auto-start camera on load
+/* ---------- Boot ---------- */
+window.addEventListener('load', initScanUI);
 </script>
 </body>
 </html>
